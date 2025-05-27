@@ -1,0 +1,1 @@
+def generate_recommendations(): return ['Save more', 'Cut spending']

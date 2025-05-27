@@ -1,0 +1,1 @@
+def forecast_expenses(): return [100, 120, 130]
