@@ -1,38 +1,37 @@
 from Crypto.Cipher import AES
 from Crypto.Random import get_random_bytes
-from Crypto.Protocol.KDF import PBKDF2
 import base64
+import hashlib
 import os
 
-# Constants
-BLOCK_SIZE = AES.block_size  # 16 bytes
-KEY_LENGTH = 32  # 256 bits
-SALT = b'static_salt_value'  # In production, use os.urandom(16) and store with the ciphertext
-SECRET_PASSPHRASE = os.getenv("AES_PASSPHRASE", "default_passphrase")
+# Pad and unpad functions for block size compliance
+BS = AES.block_size
 
-def pad(data):
-    pad_len = BLOCK_SIZE - len(data) % BLOCK_SIZE
-    return data + chr(pad_len) * pad_len
+def pad(s):
+    padding_length = BS - len(s) % BS
+    return s + (chr(padding_length) * padding_length).encode()
 
-def unpad(data):
-    pad_len = ord(data[-1])
-    return data[:-pad_len]
+def unpad(s):
+    return s[:-s[-1]]
 
-def derive_key(passphrase: str, salt: bytes) -> bytes:
-    return PBKDF2(passphrase, salt, dkLen=KEY_LENGTH)
+# Generate a new encryption key (only once, store securely)
+def generate_key():
+    return base64.urlsafe_b64encode(get_random_bytes(32)).decode()
 
-def encrypt_data(data: str) -> str:
-    key = derive_key(SECRET_PASSPHRASE, SALT)
-    iv = get_random_bytes(BLOCK_SIZE)
-    cipher = AES.new(key, AES.MODE_CBC, iv)
-    padded_data = pad(data).encode()
-    encrypted = cipher.encrypt(padded_data)
+# Encrypt data using AES-256-CBC
+def encrypt_data(data, key):
+    key_bytes = base64.urlsafe_b64decode(key.encode())
+    iv = get_random_bytes(BS)
+    cipher = AES.new(key_bytes, AES.MODE_CBC, iv)
+    encrypted = cipher.encrypt(pad(data.encode()))
     return base64.b64encode(iv + encrypted).decode()
 
-def decrypt_data(encrypted_data: str) -> str:
-    key = derive_key(SECRET_PASSPHRASE, SALT)
-    raw = base64.b64decode(encrypted_data)
-    iv = raw[:BLOCK_SIZE]
-    cipher = AES.new(key, AES.MODE_CBC, iv)
-    decrypted = cipher.decrypt(raw[BLOCK_SIZE:]).decode()
-    return unpad(decrypted)
+# Decrypt data
+def decrypt_data(encrypted_data, key):
+    key_bytes = base64.urlsafe_b64decode(key.encode())
+    encrypted_data_bytes = base64.b64decode(encrypted_data.encode())
+    iv = encrypted_data_bytes[:BS]
+    encrypted = encrypted_data_bytes[BS:]
+    cipher = AES.new(key_bytes, AES.MODE_CBC, iv)
+    decrypted = unpad(cipher.decrypt(encrypted))
+    return decrypted.decode()
